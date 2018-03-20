@@ -40,7 +40,7 @@ python () {
 
     sigtype = d.getVar("IPK_GPG_SIGNATURE_TYPE")
     if sigtype.upper() != "ASC" and sigtype.upper() != "BIN":
-        raise_sanity_error("Bad value for IPK_GPG_SIGNATURE_TYPE (%s), use either ASC or BIN" % sigtype)
+        raise_sanity_error("Bad value for IPK_GPG_SIGNATURE_TYPE (%s), use either ASC or BIN" % sigtype, d)
 }
 
 def sign_ipk(d, ipk_to_sign):
