@@ -255,6 +255,8 @@ def update_alternatives_alt_targets(d, pkg):
             continue
 
         alt_target = os.path.normpath(alt_target)
+        if bb.utils.contains('DISTRO_FEATURES','alternatives-symlinks-relative',True,False,d):
+            alt_target = os.path.relpath(alt_target, os.path.dirname(alt_link))
         updates.append( (alt_name, alt_link, alt_target, alt_priority) )
 
     return updates
