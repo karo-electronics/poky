@@ -228,6 +228,8 @@ python populate_packages_updatealternatives () {
 
             # Default to generate shell script.. eventually we may want to change this...
             alt_target = os.path.normpath(alt_target)
+            if bb.utils.contains('DISTRO_FEATURES','alternatives-symlinks-relative',True,False,d):
+                alt_target = os.path.relpath(alt_target, os.path.dirname(alt_link))
 
             alt_setup_links  += '\tupdate-alternatives --install %s %s %s %s\n' % (alt_link, alt_name, alt_target, alt_priority)
             alt_remove_links += '\tupdate-alternatives --remove  %s %s\n' % (alt_name, alt_target)
