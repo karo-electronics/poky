@@ -158,7 +158,7 @@ do_compile() {
 	if [ "${BUSYBOX_SPLIT_SUID}" = "1" -a x`grep "CONFIG_FEATURE_INDIVIDUAL=y" .config` = x ]; then
 		# split the .config into two parts, and make two busybox binaries
 		if [ -e .config.orig ]; then
-			# Need to guard again an interrupted do_compile - restore any backup
+			# Need to guard against an interrupted do_compile - restore any backup
 			cp .config.orig .config
 		fi
 		cp .config .config.orig
@@ -364,7 +364,7 @@ ALTERNATIVE_PRIORITY = "50"
 
 python do_package_prepend () {
     # We need to load the full set of busybox provides from the /etc/busybox.links
-    # Use this to see the update-alternatives with the right information
+    # Use this to seed the update-alternatives with the right information
 
     dvar = d.getVar('D')
     pn = d.getVar('PN')
@@ -414,7 +414,7 @@ if test "x$D" = "x"; then
         if test -e ${sysconfdir}/busybox.links$suffix; then
             while read link; do
                 if test ! -e "$link"; then
-                    # we can use busybox here because even if we are using splitted busybox
+                    # we can use busybox here because even if we are using split busybox
                     # we've made a symlink from /bin/busybox to /bin/busybox.nosuid.
                     busybox rm -f $link
                     busybox ln -s "${base_bindir}/busybox$suffix" $link
