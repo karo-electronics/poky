@@ -128,7 +128,7 @@ Consider this additional example where the two assignments both assign
    BitBake does not interpret escape sequences like "\\n" in variable
    values. For these to have an effect, the value must be passed to some
    utility that interprets escape sequences, such as
-   ``printf`` or ``echo -n``.
+   ``printf`` or ``echo -e``.
 
 Variable Expansion
 ------------------
