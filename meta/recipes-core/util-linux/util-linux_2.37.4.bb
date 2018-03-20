@@ -180,7 +180,7 @@ do_install () {
         fi
 
 	install -d ${D}${sysconfdir}/default/
-	echo 'MOUNTALL="-t nonfs,nosmbfs,noncpfs"' > ${D}${sysconfdir}/default/mountall
+	echo 'MOUNTALL="-t nonfs,smbfs,ncpfs"' > ${D}${sysconfdir}/default/mountall
 
 	rm -f ${D}${bindir}/chkdupexe
 }
