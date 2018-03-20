@@ -702,6 +702,12 @@ python fixup_perms () {
                 self.link = None
 
         def _setdir(self, path, mode, uid, gid, walk, fmode, fuid, fgid):
+            # ignore entries for files/directories that don't exist in the target image
+            bb.note("processing %s" % d.getVar('D') + path)
+            if not os.path.exists(d.getVar('D') + path):
+                self.path = None
+                bb.note("Skipping '%s' that does not exist in build" % path)
+                return None
             self.path = os.path.normpath(path)
             self.link = None
             self.mode = self._procmode(mode)
@@ -1778,7 +1784,7 @@ python package_do_shlibs() {
             bb.note("Renaming %s to %s" % (old, new))
             os.rename(old, new)
             pkgfiles[pkg].remove(old)
-	    
+
         shlibs_file = os.path.join(shlibswork_dir, pkg + ".list")
         if len(sonames):
             fd = open(shlibs_file, 'w')
