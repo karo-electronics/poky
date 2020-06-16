@@ -90,6 +90,7 @@ SUMMARY:alsa-utils-aseqdump     = "Shows the events received at an ALSA sequence
 SUMMARY:alsa-utils-alsaloop     = "ALSA PCM loopback utility"
 SUMMARY:alsa-utils-alsaucm      = "ALSA Use Case Manager"
 
+RDEPENDS:alsa-utils-alsamixer += "ncurses"
 RRECOMMENDS:alsa-utils-alsactl = "alsa-states"
 
 do_install() {
