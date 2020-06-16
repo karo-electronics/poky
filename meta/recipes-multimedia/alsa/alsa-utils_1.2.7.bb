@@ -96,6 +96,7 @@ SUMMARY:alsa-utils-alsaloop     = "ALSA PCM loopback utility"
 SUMMARY:alsa-utils-alsaucm      = "ALSA Use Case Manager"
 SUMMARY:alsa-utils-scripts      = "Shell scripts that show help info and create ALSA configuration files"
 
+RDEPENDS:alsa-utils-alsamixer += "ncurses"
 RRECOMMENDS:alsa-utils-alsactl = "alsa-states"
 
 do_install() {
