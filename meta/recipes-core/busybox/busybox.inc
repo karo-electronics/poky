@@ -169,7 +169,7 @@ do_compile() {
 		oe_runmake busybox.cfg.nosuid
 
 		# workaround for suid bug 10346
-		if ! grep -q "CONFIG_SH_IS_NONE" busybox.cfg.nosuid; then
+		if ! grep -q "CONFIG_SH_IS_NONE" .config.orig; then
 			echo "CONFIG_SH_IS_NONE" >> busybox.cfg.suid
 		fi
 
@@ -184,7 +184,7 @@ do_compile() {
 			done > .config.app.$s
 
 			# workaround for suid bug 10346
-			if [ "$s" = "suid" ] ; then
+			if [ "$s" = "suid" -a x`grep "^CONFIG_SH_IS_NONE=y" .config.orig` = x ] ; then
 				sed "s/.*CONFIG_SH_IS_NONE.*$/CONFIG_SH_IS_NONE=y/" -i .config.app.suid
 			fi
 
