@@ -100,6 +100,7 @@ SUMMARY:alsa-utils-alsaucm      = "ALSA Use Case Manager"
 SUMMARY:alsa-utils-scripts      = "Shell scripts that show help info and create ALSA configuration files"
 SUMMARY:alsa-utils-nhltdmicinfo = "Dumps microphone array information from ACPI NHLT table"
 
+RDEPENDS:alsa-utils-alsamixer += "ncurses"
 RRECOMMENDS:alsa-utils-alsactl = "alsa-states"
 
 do_install() {
