@@ -86,6 +86,7 @@ SUMMARY_alsa-utils-aseqdump     = "Shows the events received at an ALSA sequence
 SUMMARY_alsa-utils-alsaloop     = "ALSA PCM loopback utility"
 SUMMARY_alsa-utils-alsaucm      = "ALSA Use Case Manager"
 
+RDEPENDS_alsa-utils-alsamixer += "ncurses"
 RRECOMMENDS_alsa-utils-alsactl = "alsa-states"
 
 ALLOW_EMPTY_alsa-utils = "1"

@@ -62,7 +62,7 @@ ALTERNATIVE_PRIORITY = "10"
 
 # We need special processing for vardeps because it can not work on
 # modified flag values.  So we aggregate the flags into a new variable
-# and include that vairable in the set.
+# and include that variable in the set.
 UPDALTVARS  = "ALTERNATIVE ALTERNATIVE_LINK_NAME ALTERNATIVE_TARGET ALTERNATIVE_PRIORITY"
 
 PACKAGE_WRITE_DEPS += "virtual/update-alternatives-native"
@@ -255,6 +255,8 @@ def update_alternatives_alt_targets(d, pkg):
             continue
 
         alt_target = os.path.normpath(alt_target)
+        if bb.utils.contains('DISTRO_FEATURES','alternatives-symlinks-relative',True,False,d):
+            alt_target = os.path.relpath(alt_target, os.path.dirname(alt_link))
         updates.append( (alt_name, alt_link, alt_target, alt_priority) )
 
     return updates

@@ -4,6 +4,9 @@ HOMEPAGE = "https://www.busybox.net"
 BUGTRACKER = "https://bugs.busybox.net/"
 
 DEPENDS += "kern-tools-native virtual/crypt"
+# When pam is selected in the DISTRO_FEATURES the target-libpam must be installed
+# for the busybox build to work
+DEPENDS += "${@ bb.utils.contains('DISTRO_FEATURES','pam','libpam','',d)}"
 
 # bzip2 applet in busybox is based on lightly-modified bzip2 source
 # the GPL is version 2 only
@@ -158,7 +161,7 @@ do_compile() {
 	if [ "${BUSYBOX_SPLIT_SUID}" = "1" -a x`grep "CONFIG_FEATURE_INDIVIDUAL=y" .config` = x ]; then
 		# split the .config into two parts, and make two busybox binaries
 		if [ -e .config.orig ]; then
-			# Need to guard again an interrupted do_compile - restore any backup
+			# Need to guard against an interrupted do_compile - restore any backup
 			cp .config.orig .config
 		fi
 		cp .config .config.orig
@@ -166,7 +169,7 @@ do_compile() {
 		oe_runmake busybox.cfg.nosuid
 
 		# workaround for suid bug 10346
-		if ! grep -q "CONFIG_SH_IS_NONE" busybox.cfg.nosuid; then
+		if ! grep -q "CONFIG_SH_IS_NONE" .config.orig; then
 			echo "CONFIG_SH_IS_NONE" >> busybox.cfg.suid
 		fi
 
@@ -181,7 +184,7 @@ do_compile() {
 			done > .config.app.$s
 
 			# workaround for suid bug 10346
-			if [ "$s" = "suid" ] ; then
+			if [ "$s" = "suid" -a x`grep "^CONFIG_SH_IS_NONE=y" .config.orig` = x ] ; then
 				sed "s/.*CONFIG_SH_IS_NONE.*$/CONFIG_SH_IS_NONE=y/" -i .config.app.suid
 			fi
 
@@ -364,7 +367,7 @@ ALTERNATIVE_PRIORITY = "50"
 
 python do_package_prepend () {
     # We need to load the full set of busybox provides from the /etc/busybox.links
-    # Use this to see the update-alternatives with the right information
+    # Use this to seed the update-alternatives with the right information
 
     dvar = d.getVar('D')
     pn = d.getVar('PN')
@@ -414,7 +417,7 @@ if test "x$D" = "x"; then
         if test -e ${sysconfdir}/busybox.links$suffix; then
             while read link; do
                 if test ! -e "$link"; then
-                    # we can use busybox here because even if we are using splitted busybox
+                    # we can use busybox here because even if we are using split busybox
                     # we've made a symlink from /bin/busybox to /bin/busybox.nosuid.
                     busybox rm -f $link
                     busybox ln -s "${base_bindir}/busybox$suffix" $link
