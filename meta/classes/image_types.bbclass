@@ -1,3 +1,9 @@
+# IMAGE_NAME is the base name for everything produced when building images.
+# The actual image that contains the rootfs has an additional suffix (.rootfs
+# by default) followed by additional suffices which describe the format (.ext4,
+# .ext4.xz, etc.).
+IMAGE_NAME_SUFFIX ??= ".rootfs"
+
 # The default aligment of the size of the rootfs is set to 1KiB. In case
 # you're using the SD card emulation of a QEMU system simulator you may
 # set this value to 2048 (2MiB alignment).
@@ -142,6 +148,115 @@ UBI_VOLNAME ?= "${MACHINE}-rootfs"
 UBI_VOLTYPE ?= "dynamic"
 UBI_IMGTYPE ?= "ubifs"
 
+multivol_ubi_cfg() {
+	get_leb_cnt() {
+		local sz="$(echo $1 | sed 's/[^0-9]//g')"
+		local lebsz="$2"
+		case $1 in
+			*GiB)
+				sz=`expr $sz \* 1048576`
+				;;
+			*MiB)
+				sz=`expr $sz \* 1024`
+				;;
+			*KiB)
+				;;
+			*)
+				sz=`expr \( $sz + 1023 \) / 1024`
+		esac
+		echo "`expr \( $sz \* 1024 + $lebsz - 1 \) / $lebsz`"
+	}
+	local vol_name="$2"
+	local vol_id="$3"
+	local vol_type="$4"
+
+	echo "[${vol_name}]" >> ubinize-${IMAGE_NAME}.cfg
+	echo mode=ubi >> ubinize-${IMAGE_NAME}.cfg
+	eval local ubivol_img=\"\$UBIVOL_IMAGE_${vol_name}\"
+	eval local ubivol_files=\"\$UBIVOL_FILES_${vol_name}\"
+	eval local ubivol_size=\"\$UBIVOL_SIZE_${vol_name}\"
+	eval local ubivol_flags=\"\$UBIVOL_FLAGS_${vol_name}\"
+
+	if [ -n "$ubivol_files" -a -n "$ubivol_img" ];then
+		bbfatal "UBIVOL_FILES and UBIVOL_IMAGE are mutually exclusive"
+	fi
+	if [ -n "$ubivol_files" ]; then
+		local mkubifs_args="$1"
+		local lebsize="${MKUBIFS_LEB_SIZE}"
+		if [ -z "${ubivol_size}" ];then
+			ubivol_size="`stat -c %s "${ubivol_files}"`"
+		fi
+		local leb_cnt="`get_leb_cnt "${ubivol_size}" ${lebsize}`"
+		echo "image=${IMAGE_NAME}.${vol_name}.ubifs" >> \
+				ubinize-${IMAGE_NAME}.cfg
+		if [ "${ubivol_files#/}" = "${ubivol_files}" ];then
+			# prefix relative path names with DEPLOY_DIR_IMAGE
+			eval ubivol_files=\"${DEPLOY_DIR_IMAGE}/\${ubivol_files}\"
+		fi
+		mkfs.ubifs ${mkubifs_args} -c ${leb_cnt} -r ${ubivol_files} -o ${IMAGE_NAME}.${vol_name}.ubifs
+		ln -snvf ${IMAGE_NAME}.${vol_name}.ubifs ${IMAGE_BASENAME}-`basename ${ubivol_files}`.ubifs
+	elif [ -n "$ubivol_img" ]; then
+		echo "image=${IMAGE_NAME}.${vol_name}.img" >> \
+				ubinize-${IMAGE_NAME}.cfg
+		if [ "${ubivol_img#/}" = "${ubivol_img}" ];then
+			# prefix relative path names with DEPLOY_DIR_IMAGE
+			eval ubivol_img=\"${DEPLOY_DIR_IMAGE}/\${ubivol_img}\"
+		fi
+		install -v ${ubivol_img} ${IMAGE_NAME}.${vol_name}.img
+		ln -snvf ${IMAGE_NAME}.${vol_name}.img ${IMAGE_BASENAME}-`basename ${ubivol_img}`.img
+	fi
+	echo vol_name=${vol_name} >> ubinize-${IMAGE_NAME}.cfg
+	echo vol_id=${vol_id} >> ubinize-${IMAGE_NAME}.cfg
+	echo vol_type=${vol_type} >> ubinize-${IMAGE_NAME}.cfg
+	if [ -n "${ubivol_size}" ];then
+	    echo vol_size=${ubivol_size} >> ubinize-${IMAGE_NAME}.cfg
+	fi
+	if [ -n "$ubivol_flags" ];then
+		echo vol_flags=$ubivol_flags >> ubinize-${IMAGE_NAME}.cfg
+	fi
+}
+
+IMAGE_CMD:multivol_ubi () {
+	local vol_name
+	# Split MKUBIFS_ARGS_<vol_name> and UBINIZE_ARGS_<vol_name>
+	local ubi_volidx=1
+	local ubinize_args="${UBINIZE_ARGS}"
+
+	install -d -m 0755 ${IMGDEPLOYDIR}/multivol-ubi-${UBI_VOLNAME}
+	cd ${IMGDEPLOYDIR}/multivol-ubi-${UBI_VOLNAME}
+	rm -vf ubinize-${IMAGE_NAME}.cfg
+
+	for vol_name in ${MULTIUBI_VOLUMES}; do
+		eval local mkubifs_args=\"\$MKUBIFS_ARGS_${vol_name}\"
+		if [ -z "$mkubifs_args" ];then
+			local mkubifs_args="${MKUBIFS_ARGS}"
+		fi
+
+		eval local vol_id=\"\$UBIVOL_ID_${vol_name}\"
+		if [ -z "${vol_id}" ];then
+		     	vol_id=${ubi_volidx}
+		else
+			ubi_volidx=`expr ${vol_id}`
+		fi
+
+		eval local vol_type=\"\$UBIVOL_TYPE_${vol_name}\"
+		if [ -z "${vol_type}" ];then
+		     	vol_type=dynamic
+		fi
+
+		multivol_ubi_cfg "${mkubifs_args}" "${vol_name}" "${vol_id}" "${vol_type}"
+		ubi_volidx=`expr $ubi_volidx + 1`
+	done
+
+	ubinize -o ${IMGDEPLOYDIR}/${IMAGE_NAME}${IMAGE_NAME_SUFFIX}.ubi ${ubinize_args} \
+		ubinize-${IMAGE_NAME}.cfg
+	ln -sf ubinize-${IMAGE_NAME}.cfg ubinize-${IMAGE_LINK_NAME}.cfg
+	if [ -e ${IMGDEPLOYDIR}/${IMAGE_NAME}${IMAGE_NAME_SUFFIX}.ubi ]; then
+		ln -sf ${IMAGE_NAME}${IMAGE_NAME_SUFFIX}.ubi \
+		${IMGDEPLOYDIR}/${IMAGE_LINK_NAME}.ubi
+	fi
+}
+
 multiubi_mkfs() {
 	local mkubifs_args="$1"
 	local ubinize_args="$2"
@@ -171,6 +286,7 @@ multiubi_mkfs() {
 
 	# Cleanup cfg file
 	mv ubinize${vname}-${IMAGE_NAME}.cfg ${IMGDEPLOYDIR}/
+	ln -sf ubinize${vname}-${IMAGE_NAME}.cfg ${IMGDEPLOYDIR}/ubinize${vname}-${IMAGE_LINK_NAME}.cfg
 
 	# Create own symlinks for 'named' volumes
 	if [ -n "$vname" ]; then
@@ -251,6 +367,7 @@ do_image_squashfs_zst[depends] += "squashfs-tools-native:do_populate_sysroot"
 do_image_ubi[depends] += "mtd-utils-native:do_populate_sysroot"
 do_image_ubifs[depends] += "mtd-utils-native:do_populate_sysroot"
 do_image_multiubi[depends] += "mtd-utils-native:do_populate_sysroot"
+do_image_multivol_ubi[depends] += "mtd-utils-native:do_populate_sysroot"
 do_image_f2fs[depends] += "f2fs-tools-native:do_populate_sysroot"
 do_image_erofs[depends] += "erofs-utils-native:do_populate_sysroot"
 do_image_erofs_lz4[depends] += "erofs-utils-native:do_populate_sysroot"
@@ -265,7 +382,7 @@ IMAGE_TYPES = " \
     ext4 ext4.gz \
     btrfs \
     squashfs squashfs-xz squashfs-lzo squashfs-lz4 squashfs-zst \
-    ubi ubifs multiubi \
+    ubi ubifs multiubi multivol_ubi \
     tar tar.gz tar.bz2 tar.xz tar.lz4 tar.zst \
     cpio cpio.gz cpio.xz cpio.lzma cpio.lz4 cpio.zst \
     wic wic.gz wic.bz2 wic.lzma wic.zst \
