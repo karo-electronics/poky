@@ -1,3 +1,9 @@
+# IMAGE_NAME is the base name for everything produced when building images.
+# The actual image that contains the rootfs has an additional suffix (.rootfs
+# by default) followed by additional suffices which describe the format (.ext4,
+# .ext4.xz, etc.).
+IMAGE_NAME_SUFFIX ??= ".rootfs"
+
 # The default aligment of the size of the rootfs is set to 1KiB. In case
 # you're using the SD card emulation of a QEMU system simulator you may
 # set this value to 2048 (2MiB alignment).
@@ -108,6 +114,16 @@ IMAGE_CMD_squashfs-xz = "mksquashfs ${IMAGE_ROOTFS} ${IMGDEPLOYDIR}/${IMAGE_NAME
 IMAGE_CMD_squashfs-lzo = "mksquashfs ${IMAGE_ROOTFS} ${IMGDEPLOYDIR}/${IMAGE_NAME}${IMAGE_NAME_SUFFIX}.squashfs-lzo ${EXTRA_IMAGECMD} -noappend -comp lzo"
 IMAGE_CMD_squashfs-lz4 = "mksquashfs ${IMAGE_ROOTFS} ${IMGDEPLOYDIR}/${IMAGE_NAME}${IMAGE_NAME_SUFFIX}.squashfs-lz4 ${EXTRA_IMAGECMD} -noappend -comp lz4"
 
+# By default, tar from the host is used, which can be quite old. If
+# you need special parameters (like --xattrs) which are only supported
+# by GNU tar upstream >= 1.27, then override that default:
+# IMAGE_CMD_TAR = "tar --xattrs --xattrs-include=*"
+# do_image_tar[depends] += "tar-replacement-native:do_populate_sysroot"
+# EXTRANATIVEPATH += "tar-native"
+#
+# The GNU documentation does not specify whether --xattrs-include is necessary.
+# In practice, it turned out to be not needed when creating archives and
+# required when extracting, but it seems prudent to use it in both cases.
 IMAGE_CMD_TAR ?= "tar"
 # ignore return code 1 "file changed as we read it" as other tasks(e.g. do_image_wic) may be hardlinking rootfs
 IMAGE_CMD_tar = "${IMAGE_CMD_TAR} --sort=name --format=posix --numeric-owner -cf ${IMGDEPLOYDIR}/${IMAGE_NAME}${IMAGE_NAME_SUFFIX}.tar -C ${IMAGE_ROOTFS} . || [ $? -eq 1 ]"
@@ -134,10 +150,95 @@ IMAGE_CMD_cpio () {
 
 UBI_VOLNAME ?= "${MACHINE}-rootfs"
 
+multivol_ubi_cfg() {
+	local mkubifs_args="$1"
+	local vol_name="$2"
+	local vol_id="$3"
+	local vol_type="$4"
+
+	echo "[${vol_name}]" >> ubinize-${IMAGE_NAME}.cfg
+	echo mode=ubi >> ubinize-${IMAGE_NAME}.cfg
+	eval local ubivol_img=\"\$UBIVOL_IMAGE_${vol_name}\"
+	eval local ubivol_files=\"\$UBIVOL_FILES_${vol_name}\"
+	eval local ubivol_size=\"\$UBIVOL_SIZE_${vol_name}\"
+	eval local ubivol_flags=\"\$UBIVOL_FLAGS_${vol_name}\"
+
+	if [ -n "$ubivol_files" -a -n "$ubivol_img" ];then
+		bbfatal "UBIVOL_FILES and UBIVOL_IMAGE are mutually exclusive"
+	fi
+	if [ -n "$ubivol_files" ]; then
+		echo "image=${IMAGE_NAME}.${vol_name}.ubifs" >> \
+				ubinize-${IMAGE_NAME}.cfg
+		if [ "${ubivol_files#/}" = "${ubivol_files}" ];then
+		     	# prefix relative path names with DEPLOY_DIR_IMAGE
+			eval ubivol_files=\"${DEPLOY_DIR_IMAGE}/\${ubivol_files}\"
+		fi
+		mkfs.ubifs ${mkubifs_args} -r ${ubivol_files} -o ${IMAGE_NAME}.${vol_name}.ubifs
+	elif [ -n "$ubivol_img" ]; then
+		echo "image=${IMAGE_NAME}.${vol_name}.img" >> \
+				ubinize-${IMAGE_NAME}.cfg
+		if [ "${ubivol_img#/}" = "${ubivol_img}" ];then
+		     	# prefix relative path names with DEPLOY_DIR_IMAGE
+			eval ubivol_img=\"${DEPLOY_DIR_IMAGE}/\${ubivol_img}\"
+		fi
+		install -v ${ubivol_img} ${IMAGE_NAME}.${vol_name}.img
+	fi
+	echo vol_name=${vol_name} >> ubinize-${IMAGE_NAME}.cfg
+	echo vol_id=${vol_id} >> ubinize-${IMAGE_NAME}.cfg
+	echo vol_type=${vol_type} >> ubinize-${IMAGE_NAME}.cfg
+	if [ -n "${ubivol_size}" ];then
+	    echo vol_size=${ubivol_size} >> ubinize-${IMAGE_NAME}.cfg
+	fi
+	if [ -n "$ubivol_flags" ];then
+		echo vol_flags=$ubivol_flags >> ubinize-${IMAGE_NAME}.cfg
+	fi
+}
+
+IMAGE_CMD_multivol_ubi () {
+	local vol_name
+	# Split MKUBIFS_ARGS_<vol_name> and UBINIZE_ARGS_<vol_name>
+	local ubi_volidx=1
+	local ubinize_args="${UBINIZE_ARGS}"
+
+	install -d -m 0755 ${IMGDEPLOYDIR}/multivol-ubi-${UBI_VOLNAME}
+	cd ${IMGDEPLOYDIR}/multivol-ubi-${UBI_VOLNAME}
+	rm -vf ubinize-${IMAGE_NAME}.cfg
+
+	for vol_name in ${MULTIUBI_VOLUMES}; do
+		eval local mkubifs_args=\"\$MKUBIFS_ARGS_${vol_name}\"
+		if [ -z "$mkubifs_args" ];then
+			mkubifs_args="${MKUBIFS_ARGS}"
+		fi
+
+		eval local vol_id=\"\$UBIVOL_ID_${vol_name}\"
+		if [ -z "${vol_id}" ];then
+		     	vol_id=${ubi_volidx}
+		else
+			ubi_volidx=`expr ${vol_id}`
+		fi
+
+		eval local vol_type=\"\$UBIVOL_TYPE_${vol_name}\"
+		if [ -z "${vol_type}" ];then
+		     	vol_type=dynamic
+		fi
+
+		multivol_ubi_cfg "${mkubifs_args}" "${vol_name}" "${vol_id}" "${vol_type}"
+		ubi_volidx=`expr $ubi_volidx + 1`
+	done
+
+	ubinize -o ${IMGDEPLOYDIR}/${IMAGE_NAME}${IMAGE_NAME_SUFFIX}.ubi ${ubinize_args} \
+		ubinize-${IMAGE_NAME}.cfg
+	ln -sf ubinize-${IMAGE_NAME}.cfg ubinize-${IMAGE_LINK_NAME}.cfg
+	if [ -e ${IMGDEPLOYDIR}/${IMAGE_NAME}${IMAGE_NAME_SUFFIX}.ubi ]; then
+		ln -sf ${IMAGE_NAME}${IMAGE_NAME_SUFFIX}.ubi \
+		${IMGDEPLOYDIR}/${IMAGE_LINK_NAME}.ubi
+	fi
+}
+
 multiubi_mkfs() {
 	local mkubifs_args="$1"
 	local ubinize_args="$2"
-    
+
         # Added prompt error message for ubi and ubifs image creation.
         if [ -z "$mkubifs_args" ] || [ -z "$ubinize_args" ]; then
             bbfatal "MKUBIFS_ARGS and UBINIZE_ARGS have to be set, see http://www.linux-mtd.infradead.org/faq/ubifs.html for details"
@@ -163,6 +264,7 @@ multiubi_mkfs() {
 
 	# Cleanup cfg file
 	mv ubinize${vname}-${IMAGE_NAME}.cfg ${IMGDEPLOYDIR}/
+	ln -sf ubinize${vname}-${IMAGE_NAME}.cfg ${IMGDEPLOYDIR}/ubinize${vname}-${IMAGE_LINK_NAME}.cfg
 
 	# Create own symlinks for 'named' volumes
 	if [ -n "$vname" ]; then
@@ -242,6 +344,7 @@ do_image_squashfs_lz4[depends] += "squashfs-tools-native:do_populate_sysroot"
 do_image_ubi[depends] += "mtd-utils-native:do_populate_sysroot"
 do_image_ubifs[depends] += "mtd-utils-native:do_populate_sysroot"
 do_image_multiubi[depends] += "mtd-utils-native:do_populate_sysroot"
+do_image_multivol_ubi[depends] += "mtd-utils-native:do_populate_sysroot"
 do_image_f2fs[depends] += "f2fs-tools-native:do_populate_sysroot"
 
 # This variable is available to request which values are suitable for IMAGE_FSTYPES
@@ -255,7 +358,7 @@ IMAGE_TYPES = " \
     iso \
     hddimg \
     squashfs squashfs-xz squashfs-lzo squashfs-lz4 \
-    ubi ubifs multiubi \
+    ubi ubifs multiubi multivol_ubi \
     tar tar.gz tar.bz2 tar.xz tar.lz4 tar.zst \
     cpio cpio.gz cpio.xz cpio.lzma cpio.lz4 \
     wic wic.gz wic.bz2 wic.lzma wic.zst \
