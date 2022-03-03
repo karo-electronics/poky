@@ -151,7 +151,23 @@ IMAGE_CMD_cpio () {
 UBI_VOLNAME ?= "${MACHINE}-rootfs"
 
 multivol_ubi_cfg() {
-	local mkubifs_args="$1"
+	get_leb_cnt() {
+		local sz="${1%${1//[0-9]/}}"
+		local lebsz="$2"
+		case $1 in
+			*GiB)
+				sz=`expr $sz \* 1048576`
+				;;
+			*MiB)
+				sz=`expr $sz \* 1024`
+				;;
+			*KiB)
+				;;
+			*)
+				sz=`expr \( $sz + 1023 \) / 1024`
+		esac
+		echo "`expr \( $sz \* 1024 + $lebsz - 1 \) / $lebsz`"
+	}
 	local vol_name="$2"
 	local vol_id="$3"
 	local vol_type="$4"
@@ -167,21 +183,29 @@ multivol_ubi_cfg() {
 		bbfatal "UBIVOL_FILES and UBIVOL_IMAGE are mutually exclusive"
 	fi
 	if [ -n "$ubivol_files" ]; then
+		local mkubifs_args="$1"
+		local lebsize="${MKUBIFS_LEB_SIZE}"
+		if [ -z "${ubivol_size}" ];then
+			ubivol_size="`stat -c %s "${ubivol_files}"`"
+		fi
+		local leb_cnt="`get_leb_cnt "${ubivol_size}" ${lebsize}`"
 		echo "image=${IMAGE_NAME}.${vol_name}.ubifs" >> \
 				ubinize-${IMAGE_NAME}.cfg
 		if [ "${ubivol_files#/}" = "${ubivol_files}" ];then
-		     	# prefix relative path names with DEPLOY_DIR_IMAGE
+			# prefix relative path names with DEPLOY_DIR_IMAGE
 			eval ubivol_files=\"${DEPLOY_DIR_IMAGE}/\${ubivol_files}\"
 		fi
-		mkfs.ubifs ${mkubifs_args} -r ${ubivol_files} -o ${IMAGE_NAME}.${vol_name}.ubifs
+		mkfs.ubifs ${mkubifs_args} -c ${leb_cnt} -r ${ubivol_files} -o ${IMAGE_NAME}.${vol_name}.ubifs
+		ln -snvf ${IMAGE_NAME}.${vol_name}.ubifs ${IMAGE_BASENAME}-`basename ${ubivol_files}`.ubifs
 	elif [ -n "$ubivol_img" ]; then
 		echo "image=${IMAGE_NAME}.${vol_name}.img" >> \
 				ubinize-${IMAGE_NAME}.cfg
 		if [ "${ubivol_img#/}" = "${ubivol_img}" ];then
-		     	# prefix relative path names with DEPLOY_DIR_IMAGE
+			# prefix relative path names with DEPLOY_DIR_IMAGE
 			eval ubivol_img=\"${DEPLOY_DIR_IMAGE}/\${ubivol_img}\"
 		fi
 		install -v ${ubivol_img} ${IMAGE_NAME}.${vol_name}.img
+		ln -snvf ${IMAGE_NAME}.${vol_name}.img ${IMAGE_BASENAME}-`basename ${ubivol_img}`.img
 	fi
 	echo vol_name=${vol_name} >> ubinize-${IMAGE_NAME}.cfg
 	echo vol_id=${vol_id} >> ubinize-${IMAGE_NAME}.cfg
@@ -207,7 +231,7 @@ IMAGE_CMD_multivol_ubi () {
 	for vol_name in ${MULTIUBI_VOLUMES}; do
 		eval local mkubifs_args=\"\$MKUBIFS_ARGS_${vol_name}\"
 		if [ -z "$mkubifs_args" ];then
-			mkubifs_args="${MKUBIFS_ARGS}"
+			local mkubifs_args="${MKUBIFS_ARGS}"
 		fi
 
 		eval local vol_id=\"\$UBIVOL_ID_${vol_name}\"
