@@ -152,7 +152,7 @@ UBI_VOLNAME ?= "${MACHINE}-rootfs"
 
 multivol_ubi_cfg() {
 	get_leb_cnt() {
-		local sz="${1%${1//[0-9]/}}"
+		local sz="$(echo $1 | sed 's/[^0-9]//g')"
 		local lebsz="$2"
 		case $1 in
 			*GiB)
@@ -195,17 +195,17 @@ multivol_ubi_cfg() {
 			# prefix relative path names with DEPLOY_DIR_IMAGE
 			eval ubivol_files=\"${DEPLOY_DIR_IMAGE}/\${ubivol_files}\"
 		fi
-		mkfs.ubifs ${mkubifs_args} -c ${leb_cnt} -r ${ubivol_files} -o ${IMAGE_NAME}.${vol_name}.ubifs
+		mkfs.ubifs -r ${ubivol_files} -o ${IMAGE_NAME}.${vol_name}.ubifs -c ${leb_cnt} ${mkubifs_args}
 		ln -snvf ${IMAGE_NAME}.${vol_name}.ubifs ${IMAGE_BASENAME}-`basename ${ubivol_files}`.ubifs
 	elif [ -n "$ubivol_img" ]; then
-		echo "image=${IMAGE_NAME}.${vol_name}.img" >> \
+		echo "image=${IMAGE_NAME}.${vol_name}.ubifs" >> \
 				ubinize-${IMAGE_NAME}.cfg
 		if [ "${ubivol_img#/}" = "${ubivol_img}" ];then
 			# prefix relative path names with DEPLOY_DIR_IMAGE
 			eval ubivol_img=\"${DEPLOY_DIR_IMAGE}/\${ubivol_img}\"
 		fi
-		install -v ${ubivol_img} ${IMAGE_NAME}.${vol_name}.img
-		ln -snvf ${IMAGE_NAME}.${vol_name}.img ${IMAGE_BASENAME}-`basename ${ubivol_img}`.img
+		install -v ${ubivol_img} ${IMAGE_NAME}.${vol_name}.ubifs
+		ln -snvf ${IMAGE_NAME}.${vol_name}.ubifs ${IMAGE_BASENAME}-`basename ${ubivol_img}`.ubifs
 	fi
 	echo vol_name=${vol_name} >> ubinize-${IMAGE_NAME}.cfg
 	echo vol_id=${vol_id} >> ubinize-${IMAGE_NAME}.cfg
