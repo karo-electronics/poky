@@ -184,6 +184,7 @@ vol_type=${UBI_VOLTYPE}
 vol_name=${UBI_VOLNAME}
 vol_flags=autoresize
 EOF
+}
 
 multivol_ubi_cfg() {
 	get_leb_cnt() {
