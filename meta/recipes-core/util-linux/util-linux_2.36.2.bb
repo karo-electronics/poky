@@ -330,3 +330,6 @@ do_install_ptest() {
     sed -i 's|@base_sbindir@|${base_sbindir}|g'       ${D}${PTEST_PATH}/run-ptest
 
 }
+
+EXTRA_OECONF_append = " --disable-raw"
+
